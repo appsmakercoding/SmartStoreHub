@@ -1,0 +1,22 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "licenses": {
+      "$key": {
+        ".read": true,
+        "device": {
+          ".write": "!data.exists() && root.child('licenses').child($key).child('plan').exists()",
+          ".validate": "newData.isString() && newData.val().length < 64"
+        }
+      }
+    },
+    "trials": {
+      "$dev": {
+        ".read": true,
+        ".write": "!data.exists()",
+        ".validate": "newData.isString() && newData.val().length < 40"
+      }
+    }
+  }
+}
