@@ -7,7 +7,7 @@ import 'db.dart';
 
 // ⚠ নিচের দুটি আপনার নিজের তথ্য দিয়ে বদলান
 const kFirebase = 'https://my-shop-7013d-default-rtdb.firebaseio.com';
-const kContact = 'লাইসেন্স কিনতে যোগাযোগ করুন: Hasan — 01XXXXXXXXX';
+const kContact = 'লাইসেন্স কিনতে যোগাযোগ করুন: Hasan — 01326027993';
 const kTrialDays = 14;
 const kOfflineGraceDays = 14;
 
