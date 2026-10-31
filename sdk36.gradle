@@ -1,0 +1,7 @@
+gradle.beforeProject { p ->
+  p.afterEvaluate {
+    if (p.plugins.hasPlugin('com.android.library')) {
+      p.android.compileSdkVersion 36
+    }
+  }
+}
