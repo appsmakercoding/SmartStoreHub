@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:path/path.dart';
+import 'package:path/path.dart' as pth;
 import 'package:share_plus/share_plus.dart';
 import 'package:sqflite/sqflite.dart';
 import '../core/db.dart';
@@ -24,7 +24,7 @@ class MoreScreen extends StatelessWidget {
       _t(Icons.person, 'প্রোফাইল ও পাসওয়ার্ড', () => pushPage(context, 'প্রোফাইল', const ProfileScreen())),
       if (admin)
         _t(Icons.backup, 'ডেটা ব্যাকআপ (শেয়ার/সংরক্ষণ)', () async {
-          final path = join(await getDatabasesPath(), 'smartstorehub.db');
+          final path = pth.join(await getDatabasesPath(), 'smartstorehub.db');
           await Share.shareXFiles([XFile(path)], text: 'SmartStoreHub Backup');
           await Db.log('ব্যাকআপ নেওয়া হয়েছে');
         }),
