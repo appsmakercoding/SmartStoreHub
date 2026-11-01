@@ -20,6 +20,11 @@ class SmartStoreHubApp extends StatelessWidget {
           theme: appTheme(),
           darkTheme: appTheme(Brightness.dark),
           themeMode: m,
+          builder: (context, child) => Listener(
+            behavior: HitTestBehavior.translucent,
+            onPointerDown: (_) => Activity.onTouch?.call(),
+            child: child ?? const SizedBox.shrink(),
+          ),
           home: const Gate(),
         ),
       );
