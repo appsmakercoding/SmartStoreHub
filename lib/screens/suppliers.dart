@@ -29,54 +29,142 @@ class _SupState extends State<SuppliersScreen> {
     _load();
   }
 
-  void _menu(Rec s) => showModalBottomSheet(
-        context: context,
-        builder: (sc) => SafeArea(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            ListTile(
-              leading: const Icon(Icons.add_shopping_cart, color: C.teal),
-              title: const Text('নতুন ক্রয় (মাল কেনা)'),
-              onTap: () async {
-                Navigator.pop(sc);
-                await Navigator.push(context, MaterialPageRoute(builder: (_) => PurchaseScreen(supplier: s)));
-                _load();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.payments, color: C.gold),
-              title: const Text('বাকি পরিশোধ করা'),
-              onTap: () async {
-                Navigator.pop(sc);
-                final r = await askDialog(context, '${s['name']} • পাওনা ${money(n(s['due']))}', ['পরিশোধের পরিমাণ (৳)'], numeric: {0});
-                final v = r == null ? null : double.tryParse(r[0]);
-                if (v == null || v <= 0) return;
-                await Db.paySupplier(s['id'] as int, v);
-                _load();
-              },
-            ),
-          ]),
-        ),
-      );
-
   @override
   Widget build(BuildContext context) {
-    final total = list.fold<double>(0, (s, c) => s + n(c['due']));
+    final bought = list.fold<double>(0, (s, c) => s + n(c['bought']));
+    final paid = list.fold<double>(0, (s, c) => s + n(c['paid_total']));
+    final due = list.fold<double>(0, (s, c) => s + n(c['due']));
     return Scaffold(
       floatingActionButton: FloatingActionButton(backgroundColor: C.gold, onPressed: _add, child: const Icon(Icons.add_business)),
       body: Column(children: [
-        Padding(padding: const EdgeInsets.all(10), child: StatCard('সরবরাহকারীকে দিতে হবে', money(total), Icons.local_shipping, C.red)),
-        Expanded(
-          child: ListView(children: [
-            for (final s in list)
-              ListTile(
-                leading: CircleAvatar(child: Text('${s['name']}'.characters.first)),
-                title: Text('${s['name']}'),
-                subtitle: Text('${s['phone'] ?? ''}'),
-                trailing: Text(money(n(s['due'])), style: TextStyle(fontWeight: FontWeight.bold, color: n(s['due']) > 0 ? C.red : C.teal)),
-                onTap: () => _menu(s),
-              ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
+          child: Row(children: [
+            Expanded(child: StatCard('মোট মাল নেওয়া', money(bought), Icons.local_shipping, C.teal)),
+            const SizedBox(width: 8),
+            Expanded(child: StatCard('মোট পরিশোধ', money(paid), Icons.payments, const Color(0xFF2E7D32))),
           ]),
         ),
+        Padding(padding: const EdgeInsets.all(10), child: StatCard('মোট দিতে হবে (বাকি)', money(due), Icons.account_balance_wallet, C.red)),
+        Expanded(
+          child: list.isEmpty
+              ? const Center(child: Text('কোনো সরবরাহকারী নেই', style: TextStyle(color: Colors.black45)))
+              : ListView(children: [
+                  for (final s in list)
+                    ListTile(
+                      leading: CircleAvatar(child: Text('${s['name']}'.characters.first)),
+                      title: Text('${s['name']}'),
+                      subtitle: Text('মাল ${money(n(s['bought']))} • পরিশোধ ${money(n(s['paid_total']))}'),
+                      trailing: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
+                        Text(money(n(s['due'])), style: TextStyle(fontWeight: FontWeight.bold, color: n(s['due']) > 0 ? C.red : C.teal)),
+                        const Text('বাকি', style: TextStyle(fontSize: 11, color: Colors.black54)),
+                      ]),
+                      onTap: () async {
+                        await go(context, SupplierDetailScreen(supplierId: s['id'] as int));
+                        _load();
+                      },
+                    ),
+                ]),
+        ),
+      ]),
+    );
+  }
+}
+
+class SupplierDetailScreen extends StatefulWidget {
+  final int supplierId;
+  const SupplierDetailScreen({super.key, required this.supplierId});
+  @override
+  State<SupplierDetailScreen> createState() => _SupDetState();
+}
+
+class _SupDetState extends State<SupplierDetailScreen> {
+  Rec? s;
+  List<Rec> ledger = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final r = await Db.supplier(widget.supplierId);
+    final l = await Db.supplierLedger(widget.supplierId);
+    if (mounted) {
+      setState(() {
+        s = r;
+        ledger = l.reversed.toList();
+      });
+    }
+  }
+
+  Future<void> _pay() async {
+    final due = n(s!['due']);
+    final r = await askDialog(context, '${s!['name']} • পাওনা ${money(due)}', ['পরিশোধের পরিমাণ (৳)'], init: [due.toStringAsFixed(0)], numeric: {0});
+    final v = r == null ? null : double.tryParse(r[0]);
+    if (v == null || v <= 0) return;
+    if (v > due + 0.001) {
+      if (mounted) snack(context, 'বাকির চেয়ে বেশি দেওয়া যাবে না');
+      return;
+    }
+    await Db.paySupplier(widget.supplierId, v);
+    _load();
+  }
+
+  Future<void> _items(int pid) async {
+    final items = await Db.purchaseItems(pid);
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (dc) => AlertDialog(
+        title: Text('ক্রয় #$pid'),
+        content: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            for (final x in items) Text('${x['name']}: ${fmtQty(n(x['qty']))} × ${money(n(x['cost']))} = ${money(n(x['qty']) * n(x['cost']))}'),
+          ]),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(dc), child: const Text('বন্ধ'))],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (s == null) return Scaffold(appBar: AppBar(title: const Text('সরবরাহকারী')), body: const Center(child: CircularProgressIndicator()));
+    final due = n(s!['due']);
+    return Scaffold(
+      appBar: AppBar(title: Text('${s!['name']}')),
+      body: ListView(padding: const EdgeInsets.all(12), children: [
+        Row(children: [
+          Expanded(child: StatCard('মোট মাল', money(n(s!['bought'])), Icons.local_shipping, C.teal)),
+          const SizedBox(width: 8),
+          Expanded(child: StatCard('মোট পরিশোধ', money(n(s!['paid_total'])), Icons.payments, const Color(0xFF2E7D32))),
+        ]),
+        const SizedBox(height: 8),
+        StatCard('এখন দিতে হবে', money(due), Icons.account_balance_wallet, due > 0 ? C.red : C.teal),
+        const SizedBox(height: 10),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          ElevatedButton.icon(
+            onPressed: () async {
+              await go(context, PurchaseScreen(supplier: s!));
+              _load();
+            },
+            icon: const Icon(Icons.add_shopping_cart),
+            label: const Text('নতুন ক্রয়'),
+          ),
+          if (due > 0) OutlinedButton.icon(onPressed: _pay, icon: const Icon(Icons.payments), label: const Text('পরিশোধ করুন')),
+        ]),
+        sectionTitle('খতিয়ান'),
+        if (ledger.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('কোনো লেনদেন নেই', style: TextStyle(color: Colors.black45))),
+        for (final e in ledger)
+          ListTile(
+            dense: true,
+            title: Text(e['type'] == 'purchase' ? 'ক্রয় • মোট ${money(n(e['total']))}' : 'পরিশোধ ${money(n(e['amount']))}'),
+            subtitle: Text(e['type'] == 'purchase' ? '${dt(e['date'])} • দিয়েছি ${money(n(e['paid']))}' : dt(e['date'])),
+            trailing: Text('বাকি ${money(n(e['bal']))}', style: const TextStyle(fontSize: 12)),
+            onTap: e['type'] == 'purchase' ? () => _items(e['pid'] as int) : null,
+          ),
       ]),
     );
   }

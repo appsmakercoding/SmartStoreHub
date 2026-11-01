@@ -1,44 +1,39 @@
-import 'package:flutter/material.dart';
-import 'package:path/path.dart' as pth;
-import 'package:share_plus/share_plus.dart';
-import 'package:sqflite/sqflite.dart';
-import '../core/db.dart';
-import '../core/ui.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
+import '../core/backup.dart';
+import '../core/db.dart';
 import '../core/license.dart';
+import '../core/ui.dart';
+import 'cashclose.dart';
+import 'expenses.dart';
 import 'gate.dart';
 import 'home.dart';
 import 'reports.dart';
+import 'sales.dart';
 import 'suppliers.dart';
 
 class MoreScreen extends StatelessWidget {
   const MoreScreen({super.key});
   @override
   Widget build(BuildContext context) {
-    final admin = Session.role == 'admin';
+    final admin = Session.isAdmin;
     return ListView(children: [
-      _t(Icons.bar_chart, 'রিপোর্ট (লাভ-ক্ষতি, বিক্রি)', () => pushPage(context, 'রিপোর্ট', const ReportsScreen())),
-      if (admin) _t(Icons.group_add, 'ইউজার ম্যানেজমেন্ট (ম্যানেজার/ক্যাশিয়ার)', () => pushPage(context, 'ইউজার ম্যানেজমেন্ট', const UsersScreen())),
+      sectionTitle('হিসাব-নিকাশ'),
+      _t(Icons.bar_chart, 'রিপোর্ট (লাভ-ক্ষতি, বিক্রি, বাকি)', () => pushPage(context, 'রিপোর্ট', const ReportsScreen())),
+      _t(Icons.list_alt, 'বিল তালিকা (রিটার্ন/বাতিল)', () => pushPage(context, 'বিল তালিকা', const SalesScreen())),
       _t(Icons.local_shipping, 'সরবরাহকারী ও ক্রয় (মাল কেনা)', () => pushPage(context, 'সরবরাহকারী ও ক্রয়', const SuppliersScreen())),
-      _t(Icons.history, 'অ্যাক্টিভিটি লগ', () => pushPage(context, 'অ্যাক্টিভিটি লগ', const LogScreen())),
-      _t(Icons.person, 'প্রোফাইল ও পাসওয়ার্ড', () => pushPage(context, 'প্রোফাইল', const ProfileScreen())),
-      if (admin)
-        _t(Icons.backup, 'ডেটা ব্যাকআপ (শেয়ার/সংরক্ষণ)', () async {
-          final path = pth.join(await getDatabasesPath(), 'smartstorehub.db');
-          await Share.shareXFiles([XFile(path)], text: 'SmartStoreHub Backup');
-          await Db.log('ব্যাকআপ নেওয়া হয়েছে');
-        }),
+      _t(Icons.receipt, 'দোকানের খরচ', () => pushPage(context, 'দোকানের খরচ', const ExpensesScreen())),
+      _t(Icons.account_balance, 'দৈনিক ক্যাশ ক্লোজিং', () => pushPage(context, 'দৈনিক ক্যাশ ক্লোজিং', const CashCloseScreen())),
+      sectionTitle('সেটিংস ও সুরক্ষা'),
+      if (admin) _t(Icons.group_add, 'ইউজার ম্যানেজমেন্ট (ম্যানেজার/ক্যাশিয়ার)', () => pushPage(context, 'ইউজার ম্যানেজমেন্ট', const UsersScreen())),
+      _t(Icons.history, 'অ্যাক্টিভিটি লগ (কে কী করল)', () => pushPage(context, 'অ্যাক্টিভিটি লগ', const LogScreen())),
+      _t(Icons.person, 'প্রোফাইল ও সেটিংস', () => pushPage(context, 'প্রোফাইল ও সেটিংস', const ProfileScreen())),
+      if (admin) sectionTitle('ডেটা ও লাইসেন্স'),
+      if (admin) _t(Icons.backup, 'ডেটা ব্যাকআপ (শেয়ার/সংরক্ষণ)', () => doBackup()),
       if (admin)
         _t(Icons.restore, 'ব্যাকআপ রিস্টোর', () async {
-          final ok = await showDialog<bool>(
-            context: context,
-            builder: (dc) => AlertDialog(
-              title: const Text('রিস্টোর করবেন?'),
-              content: const Text('বর্তমান সব ডেটা ব্যাকআপ ফাইলের ডেটা দিয়ে বদলে যাবে। (পুরোনোটার একটি .bak কপি থাকবে)'),
-              actions: [TextButton(onPressed: () => Navigator.pop(dc, false), child: const Text('না')), ElevatedButton(onPressed: () => Navigator.pop(dc, true), child: const Text('হ্যাঁ'))],
-            ),
-          );
-          if (ok != true) return;
+          final ok = await confirmDialog(context, 'রিস্টোর করবেন?', 'বর্তমান সব ডেটা ব্যাকআপ ফাইলের ডেটা দিয়ে বদলে যাবে। (পুরোনোটার একটি .bak কপি থাকবে)');
+          if (!ok) return;
           final r = await FilePicker.platform.pickFiles();
           final path = r?.files.single.path;
           if (path == null) return;
@@ -50,7 +45,7 @@ class MoreScreen extends StatelessWidget {
           }
           Session.user = null;
           snack(context, 'রিস্টোর সম্পন্ন, আবার লগইন করুন');
-          Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const HomeScreen()), (r) => false);
+          Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const HomeScreen()), (route) => false);
         }),
       if (admin)
         _t(Icons.verified, 'লাইসেন্স / সাবস্ক্রিপশন', () {
@@ -58,7 +53,8 @@ class MoreScreen extends StatelessWidget {
           Navigator.push(context, MaterialPageRoute(builder: (_) => LicenseScreen(info: i)));
         }),
       const SizedBox(height: 30),
-      const Center(child: Text('SmartStoreHub v1.0 • Powered by Hasan', style: TextStyle(color: Colors.black45, fontSize: 12))),
+      const Center(child: Text('SmartStoreHub v2.0 • Powered by Hasan', style: TextStyle(color: Colors.black45, fontSize: 12))),
+      const SizedBox(height: 20),
     ]);
   }
 
@@ -104,6 +100,14 @@ class _UsersState extends State<UsersScreen> {
     _load();
   }
 
+  Future<void> _delete(Rec u) async {
+    final ok = await confirmDialog(context, 'ইউজার মুছবেন?', '${u['name']} (${u['username']}) মুছে যাবে। তার আগের সব বিক্রির হিসাব অক্ষত থাকবে।', yes: 'মুছুন');
+    if (!ok) return;
+    final err = await Db.deleteUser(u['id'] as int);
+    if (err != null && mounted) snack(context, err);
+    _load();
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
         floatingActionButton: FloatingActionButton(backgroundColor: C.gold, onPressed: _add, child: const Icon(Icons.add)),
@@ -112,7 +116,7 @@ class _UsersState extends State<UsersScreen> {
             ListTile(
               leading: CircleAvatar(child: Icon(u['role'] == 'admin' ? Icons.shield : u['role'] == 'manager' ? Icons.manage_accounts : Icons.point_of_sale)),
               title: Text('${u['name']} (${u['username']})'),
-              subtitle: Text('${u['role']}'),
+              subtitle: Text(u['role'] == 'admin' ? 'এডমিন' : u['role'] == 'manager' ? 'ম্যানেজার' : 'ক্যাশিয়ার'),
               trailing: u['role'] == 'admin'
                   ? null
                   : Row(mainAxisSize: MainAxisSize.min, children: [
@@ -127,6 +131,7 @@ class _UsersState extends State<UsersScreen> {
                         },
                       ),
                       Switch(value: u['active'] == 1, onChanged: (v) async { await Db.setActive(u['id'] as int, v); _load(); }),
+                      IconButton(icon: const Icon(Icons.delete_outline, color: C.red), tooltip: 'মুছুন', onPressed: () => _delete(u)),
                     ]),
             ),
         ]),
@@ -141,7 +146,7 @@ class LogScreen extends StatelessWidget {
         builder: (c, s) => !s.hasData
             ? const Center(child: CircularProgressIndicator())
             : ListView(children: [
-                for (final l in s.data!) ListTile(dense: true, title: Text('${l['action']}'), subtitle: Text('${l['uname']} • ${'${l['created_at']}'.replaceFirst('T', ' ')}')),
+                for (final l in s.data!) ListTile(dense: true, title: Text('${l['action']}'), subtitle: Text('${l['uname']} • ${dt(l['created_at'])}')),
               ]),
       );
 }
@@ -153,11 +158,29 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileState extends State<ProfileScreen> {
-  String shop = '';
+  String shop = '', phone = '', addr = '', vat = '0', maxDisc = '10';
+
   @override
   void initState() {
     super.initState();
-    Db.setting('shop_name').then((v) { if (mounted) setState(() => shop = v); });
+    _load();
+  }
+
+  Future<void> _load() async {
+    final a = await Db.setting('shop_name');
+    final b = await Db.setting('shop_phone');
+    final c = await Db.setting('shop_address');
+    final d = await Db.setting('vat_pct', '0');
+    final e = await Db.setting('max_disc_pct', '10');
+    if (mounted) {
+      setState(() {
+        shop = a;
+        phone = b;
+        addr = c;
+        vat = d;
+        maxDisc = e;
+      });
+    }
   }
 
   @override
@@ -188,16 +211,27 @@ class _ProfileState extends State<ProfileScreen> {
             },
           ),
         ),
-        if (Session.role == 'admin')
+        if (Session.isAdmin)
           ListTile(
             leading: const Icon(Icons.store),
-            title: const Text('দোকানের নাম (রসিদে ছাপা হবে)'),
-            subtitle: Text(shop),
+            title: const Text('দোকানের তথ্য ও সেটিংস'),
+            subtitle: Text('$shop • ভ্যাট $vat% • ক্যাশিয়ার ডিসকাউন্ট সীমা $maxDisc%'),
             onTap: () async {
-              final r = await askDialog(context, 'দোকানের নাম', ['নাম'], init: [shop]);
+              final r = await askDialog(
+                context,
+                'দোকানের তথ্য ও সেটিংস',
+                ['দোকানের নাম (ভাউচারে ছাপা হবে)', 'দোকানের ফোন', 'ঠিকানা', 'ভ্যাট % (০ = নেই)', 'ক্যাশিয়ারের সর্বোচ্চ ডিসকাউন্ট %'],
+                init: [shop, phone, addr, vat, maxDisc],
+                numeric: {3, 4},
+              );
               if (r == null || r[0].isEmpty) return;
               await Db.setSetting('shop_name', r[0]);
-              setState(() => shop = r[0]);
+              await Db.setSetting('shop_phone', r[1]);
+              await Db.setSetting('shop_address', r[2]);
+              await Db.setSetting('vat_pct', '${double.tryParse(r[3]) ?? 0}');
+              await Db.setSetting('max_disc_pct', '${double.tryParse(r[4]) ?? 10}');
+              await Db.log('দোকানের সেটিংস বদলানো হয়েছে');
+              _load();
             },
           ),
       ]);

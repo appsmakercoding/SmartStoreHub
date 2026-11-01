@@ -20,13 +20,21 @@ class _LoginState extends State<LoginScreen> {
   static const titles = {'admin': 'এডমিন লগইন', 'manager': 'ম্যানেজার লগইন', 'cashier': 'ক্যাশিয়ার লগইন'};
 
   Future<void> _go() async {
+    final name = u.text.trim();
+    final lock = LoginGuard.lockedMinutes(name);
+    if (lock > 0) {
+      setState(() { err = 'অনেকবার ভুল হয়েছে। $lock মিনিট পরে চেষ্টা করুন।'; });
+      return;
+    }
     setState(() { busy = true; err = null; });
-    final user = await Db.login(u.text.trim(), p.text, widget.role);
+    final user = await Db.login(name, p.text, widget.role);
     if (!mounted) return;
     if (user == null) {
+      LoginGuard.fail(name);
       setState(() { busy = false; err = 'ইউজারনেম বা পাসওয়ার্ড ভুল'; });
       return;
     }
+    LoginGuard.ok(name);
     Session.user = user;
     await Db.log('লগইন');
     if (!mounted) return;

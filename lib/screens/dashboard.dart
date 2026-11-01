@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/backup.dart';
 import '../core/db.dart';
 import '../core/ui.dart';
 
@@ -9,11 +10,13 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashState extends State<DashboardScreen> {
-  Rec s = {};
-  double due = 0, stock = 0, supDue = 0;
-  int low = 0;
+  Rec p = {};
+  double due = 0, supDue = 0;
+  int dueCount = 0;
+  Rec stats = {};
   List<Rec> lowList = [], expList = [];
   List<MapEntry<String, double>> days = [];
+  bool needBackup = false;
 
   @override
   void initState() {
@@ -24,36 +27,51 @@ class _DashState extends State<DashboardScreen> {
   Future<void> _load() async {
     final now = DateTime.now();
     String day(DateTime d) => d.toIso8601String().substring(0, 10);
-    final today = day(now);
-    final from7 = day(now.subtract(const Duration(days: 6)));
-    final sum = await Db.summary(today);
+    final today = '${day(now)}T00:00:00';
+    final from7 = '${day(now.subtract(const Duration(days: 6)))}T00:00:00';
+    final pnl = await Db.pnl(today);
     final d7 = await Db.daily(from7);
     final map = {for (final r in d7) r['d'] as String: n(r['t'])};
-    final ds = [for (var i = 6; i >= 0; i--) MapEntry(day(now.subtract(Duration(days: i))), 0.0)];
-    final dd = [for (final e in ds) MapEntry(e.key, map[e.key] ?? 0.0)];
-    final r = await Future.wait([Db.totalDue(), Db.stockValue(), Db.lowCount(), Db.lowStock(), Db.expiring(), Db.supplierDue()]);
+    final dd = [for (var i = 6; i >= 0; i--) MapEntry(day(now.subtract(Duration(days: i))), map[day(now.subtract(Duration(days: i)))] ?? 0.0)];
+    final cd = await Db.totalDue();
+    final dc = await Db.dueCount();
+    final sd = await Db.supplierDue();
+    final st = await Db.productStats();
+    final low = await Db.lowStock();
+    final exp = await Db.expiring();
+    final lb = DateTime.tryParse(await Db.setting('last_backup'));
     if (!mounted) return;
     setState(() {
-      s = sum;
+      p = pnl;
       days = dd;
-      due = r[0] as double;
-      stock = r[1] as double;
-      low = r[2] as int;
-      lowList = r[3] as List<Rec>;
-      expList = r[4] as List<Rec>;
-      supDue = r[5] as double;
+      due = cd;
+      dueCount = dc;
+      supDue = sd;
+      stats = st;
+      lowList = low;
+      expList = exp;
+      needBackup = Session.isAdmin && (lb == null || now.difference(lb).inDays >= 7);
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    if (s.isEmpty) return const Center(child: CircularProgressIndicator());
+    if (p.isEmpty) return const Center(child: CircularProgressIndicator());
     final mx = days.fold<double>(1, (m, e) => e.value > m ? e.value : m);
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(padding: const EdgeInsets.all(12), children: [
-        if (Session.role == 'admin')
-          const Card(color: Color(0xFFFFF4D6), child: ListTile(leading: Icon(Icons.info, color: C.gold), title: Text('নিরাপত্তার জন্য ডিফল্ট পাসওয়ার্ড (admin123) আরও > প্রোফাইল থেকে বদলে নিন', style: TextStyle(fontSize: 12)))),
+        if (Session.isAdmin)
+          const Card(color: Color(0xFFFFF4D6), child: ListTile(leading: Icon(Icons.info, color: C.gold), title: Text('নিরাপত্তার জন্য ডিফল্ট পাসওয়ার্ড (admin123) আরও > প্রোফাইল থেকে বদলে নিন', style: TextStyle(fontSize: 12, color: Colors.black87)))),
+        if (needBackup)
+          Card(
+            color: const Color(0xFFFFE5E5),
+            child: ListTile(
+              leading: const Icon(Icons.backup, color: C.red),
+              title: const Text('ডেটা ব্যাকআপ নেওয়া হয়নি (৭ দিনের বেশি)', style: TextStyle(fontSize: 13, color: Colors.black87)),
+              trailing: TextButton(onPressed: () async { await doBackup(); _load(); }, child: const Text('এখনই নিন')),
+            ),
+          ),
         GridView.count(
           crossAxisCount: 2,
           shrinkWrap: true,
@@ -62,12 +80,14 @@ class _DashState extends State<DashboardScreen> {
           mainAxisSpacing: 10,
           crossAxisSpacing: 10,
           children: [
-            StatCard('আজকের বিক্রি', money(n(s['t'])), Icons.trending_up, C.teal),
-            StatCard('আজকের লাভ', money(n(s['profit'])), Icons.savings, const Color(0xFF2E7D32)),
-            StatCard('মোট বাকি', money(due), Icons.account_balance_wallet, C.red),
-            StatCard('স্টকের মূল্য', money(stock), Icons.warehouse, const Color(0xFF1565C0)),
+            StatCard('আজকের বিক্রি', money(n(p['sales'])), Icons.trending_up, C.teal),
+            StatCard('আজকের নিট লাভ', money(n(p['net'])), Icons.savings, const Color(0xFF2E7D32)),
+            StatCard('আজ বাকি আদায়', money(n(p['collected'])), Icons.payments, const Color(0xFF00838F)),
+            StatCard('আজকের খরচ', money(n(p['expenses'])), Icons.receipt, const Color(0xFF6A1B9A)),
+            StatCard('গ্রাহকের বাকি ($dueCount জন)', money(due), Icons.account_balance_wallet, C.red),
             StatCard('সরবরাহকারীর পাওনা', money(supDue), Icons.local_shipping, const Color(0xFFEF6C00)),
-            StatCard('স্টক কম', '$low টি', Icons.warning_amber, C.red),
+            StatCard('স্টকের মূল্য', money(n(stats['v'])), Icons.warehouse, const Color(0xFF1565C0)),
+            StatCard('স্টক কম', '${stats['low']} টি', Icons.warning_amber, C.red),
           ],
         ),
         const SizedBox(height: 14),
@@ -92,12 +112,12 @@ class _DashState extends State<DashboardScreen> {
           ),
         ),
         const SizedBox(height: 14),
-        Text('⚠ স্টক কম ($low টি)', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-        for (final p in lowList) ListTile(dense: true, title: Text('${p['name']}'), trailing: Text('${fmtQty(n(p['stock']))}', style: const TextStyle(color: C.red, fontWeight: FontWeight.bold))),
+        const Text('⚠ স্টক কম', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        for (final x in lowList) ListTile(dense: true, title: Text('${x['name']}'), trailing: Text('${fmtQty(n(x['stock']))} ${x['unit'] ?? ''}', style: const TextStyle(color: C.red, fontWeight: FontWeight.bold))),
         if (lowList.isEmpty) const Text('সব ঠিক আছে ✔', style: TextStyle(color: Colors.black54)),
         const SizedBox(height: 10),
         const Text('⏳ মেয়াদ শেষ হচ্ছে (৩০ দিনের মধ্যে)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-        for (final p in expList) ListTile(dense: true, title: Text('${p['name']}'), trailing: Text('${p['expiry']}', style: const TextStyle(color: C.red))),
+        for (final x in expList) ListTile(dense: true, title: Text('${x['name']}'), trailing: Text('${x['expiry']}', style: const TextStyle(color: C.red))),
         if (expList.isEmpty) const Text('কোনো সতর্কতা নেই ✔', style: TextStyle(color: Colors.black54)),
       ]),
     );
