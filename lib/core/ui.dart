@@ -117,3 +117,35 @@ class StatCard extends StatelessWidget {
         ]),
       );
 }
+
+Future<bool> confirmDialog(BuildContext c, String title, String msg, {String yes = 'হ্যাঁ'}) async {
+  final r = await showDialog<bool>(
+    context: c,
+    builder: (dc) => AlertDialog(
+      title: Text(title),
+      content: Text(msg),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(dc, false), child: const Text('না')),
+        ElevatedButton(onPressed: () => Navigator.pop(dc, true), child: Text(yes)),
+      ],
+    ),
+  );
+  return r == true;
+}
+
+String dt(Object? v) {
+  final s = '$v'.replaceFirst('T', ' ');
+  return s.length >= 16 ? s.substring(0, 16) : s;
+}
+
+Future<T?> go<T>(BuildContext c, Widget w) => Navigator.push<T>(c, MaterialPageRoute(builder: (_) => w));
+
+Widget sectionTitle(String t) => Padding(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 4),
+      child: Text(t, style: const TextStyle(fontWeight: FontWeight.bold, color: C.teal)),
+    );
+
+/// অ্যাপের যেকোনো জায়গায় স্পর্শ করলে অটো-লগআউট টাইমার রিসেট হয়
+class Activity {
+  static VoidCallback? onTouch;
+}
