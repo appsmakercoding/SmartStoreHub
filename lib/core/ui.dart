@@ -57,7 +57,7 @@ String genBarcode() {
 }
 
 Future<List<String>?> askDialog(BuildContext c, String title, List<String> labels,
-    {List<String>? init, Set<int> numeric = const {}, Set<int> secret = const {}}) {
+    {List<String>? init, Set<int> numeric = const {}, Set<int> secret = const {}, Set<int> scanFields = const {}, Future<String?> Function()? scan}) {
   final ctl = [
     for (var i = 0; i < labels.length; i++)
       TextEditingController(text: init != null && i < init.length ? init[i] : '')
@@ -77,7 +77,19 @@ Future<List<String>?> askDialog(BuildContext c, String title, List<String> label
                 keyboardType: numeric.contains(i)
                     ? const TextInputType.numberWithOptions(decimal: true)
                     : TextInputType.text,
-                decoration: InputDecoration(labelText: labels[i]),
+                decoration: InputDecoration(
+                  labelText: labels[i],
+                  suffixIcon: scanFields.contains(i) && scan != null
+                      ? IconButton(
+                          icon: const Icon(Icons.qr_code_scanner),
+                          tooltip: 'ক্যামেরায় স্ক্যান',
+                          onPressed: () async {
+                            final v = await scan();
+                            if (v != null) ctl[i].text = v;
+                          },
+                        )
+                      : null,
+                ),
               ),
             ),
         ]),
@@ -148,4 +160,14 @@ Widget sectionTitle(String t) => Padding(
 /// অ্যাপের যেকোনো জায়গায় স্পর্শ করলে অটো-লগআউট টাইমার রিসেট হয়
 class Activity {
   static VoidCallback? onTouch;
+}
+
+/// PDF তৈরির সময় বার্তা দেখায় এবং ত্রুটি ধরে
+Future<void> runPdf(BuildContext c, Future<void> Function() f) async {
+  snack(c, 'PDF তৈরি হচ্ছে…');
+  try {
+    await f();
+  } catch (e) {
+    if (c.mounted) snack(c, 'PDF তৈরি করা যায়নি: $e');
+  }
 }

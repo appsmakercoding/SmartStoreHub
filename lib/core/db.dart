@@ -548,6 +548,57 @@ class Db {
 
   static Future<List<Rec>> purchaseItems(int pid) => q('SELECT * FROM purchase_items WHERE purchase_id=?', [pid]);
 
+  // ---------- Demo / Reset ----------
+  static Future<void> loadDemo() async {
+    final d = await i;
+    final soon = DateTime.now().add(const Duration(days: 12)).toIso8601String().substring(0, 10);
+    final items = [
+      ['মিনিকেট চাল', 'কেজি', 55.0, 62.0, 300.0, ''],
+      ['মসুর ডাল', 'কেজি', 118.0, 130.0, 120.0, ''],
+      ['সয়াবিন তেল (১ লিটার)', 'লিটার', 165.0, 175.0, 80.0, ''],
+      ['চিনি', 'কেজি', 118.0, 125.0, 150.0, ''],
+      ['আটা', 'কেজি', 54.0, 60.0, 100.0, ''],
+      ['লবণ (১ কেজি)', 'প্যাক', 34.0, 40.0, 60.0, ''],
+      ['তরল দুধ (৫০০ মি.লি.)', 'পিস', 36.0, 40.0, 40.0, soon],
+      ['ডিম', 'ডজন', 125.0, 140.0, 4.0, ''],
+      ['লাক্স সাবান', 'পিস', 38.0, 45.0, 90.0, ''],
+      ['সার্ফ এক্সেল (৫০০ গ্রাম)', 'প্যাক', 105.0, 120.0, 45.0, ''],
+      ['বিস্কুট', 'প্যাকেট', 20.0, 25.0, 200.0, ''],
+      ['চা পাতা (২৫০ গ্রাম)', 'প্যাকেট', 105.0, 120.0, 50.0, ''],
+    ];
+    for (final x in items) {
+      await d.insert('products', {'branch_id': Session.branch, 'company_id': Session.company, 'name': x[0], 'unit': x[1], 'cost': x[2], 'price': x[3], 'stock': x[4], 'min_stock': 10, 'barcode': genBarcode(), 'category': 'মুদি', 'expiry': x[5]});
+    }
+    final cs = [['করিম সাহেব', '01711000001', 5000.0], ['রহিমা বেগম', '01811000002', 3000.0], ['আব্দুল জব্বার', '01911000003', 0.0], ['সালমা খাতুন', '01611000004', 2000.0]];
+    final cids = <int>[];
+    for (final c in cs) {
+      cids.add(await addCustomer(c[0] as String, c[1] as String, limit: c[2] as double));
+    }
+    await addSupplier('আলম ট্রেডার্স', '01511000005');
+    await addSupplier('রহমান এন্টারপ্রাইজ', '01311000006');
+    final ps = await products('');
+    CartItem ci(int idx, double qty) {
+      final p = ps[idx % ps.length];
+      return CartItem(p['id'] as int, '${p['name']}', n(p['price']), n(p['cost']), n(p['stock']), qty: qty, unit: '${p['unit']}');
+    }
+    await saveSale([ci(0, 5), ci(2, 1)], 0, 0, 1e9, 'ক্যাশ', null);
+    await saveSale([ci(3, 2), ci(4, 3), ci(10, 4)], 20, 0, 1e9, 'বিকাশ', null);
+    await saveSale([ci(1, 2), ci(5, 2), ci(8, 3)], 0, 0, 200, 'বাকি', cids[0]);
+    await saveSale([ci(0, 10), ci(6, 5)], 0, 0, 0, 'বাকি', cids[1]);
+    await saveSale([ci(9, 1), ci(11, 1)], 10, 0, 1e9, 'ক্যাশ', null);
+    await addExpense('ভাড়া', 500, 'ডেমো');
+    await log('ডেমো ডেটা যোগ করা হয়েছে');
+  }
+
+  /// সব ব্যবসায়িক ডেটা মুছে নতুন শুরু (ইউজার ও সেটিংস থাকে)
+  static Future<void> resetData() async {
+    final d = await i;
+    for (final t in ['sale_items', 'sales', 'payments', 'return_items', 'returns', 'purchase_items', 'purchases', 'supplier_payments', 'suppliers', 'customers', 'products', 'expenses', 'stock_adjust', 'cash_close', 'activity']) {
+      await d.delete(t);
+    }
+    await log('সব ব্যবসায়িক ডেটা মুছে নতুন শুরু করা হয়েছে');
+  }
+
   // ---------- Restore ----------
   static Future<bool> restore(String src) async {
     final f = File(src);
