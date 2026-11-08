@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../core/db.dart';
+import '../core/pdf_reports.dart';
 import '../core/ui.dart';
+import 'scanner.dart';
 
 class SuppliersScreen extends StatefulWidget {
   const SuppliersScreen({super.key});
@@ -154,6 +156,7 @@ class _SupDetState extends State<SupplierDetailScreen> {
             label: const Text('নতুন ক্রয়'),
           ),
           if (due > 0) OutlinedButton.icon(onPressed: _pay, icon: const Icon(Icons.payments), label: const Text('পরিশোধ করুন')),
+          OutlinedButton.icon(onPressed: () => runPdf(context, () => pdfSupplierStatement(widget.supplierId)), icon: const Icon(Icons.picture_as_pdf), label: const Text('খতিয়ান PDF')),
         ]),
         sectionTitle('খতিয়ান'),
         if (ledger.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('কোনো লেনদেন নেই', style: TextStyle(color: Colors.black45))),
@@ -216,7 +219,25 @@ class _PurState extends State<PurchaseScreen> {
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: Text('ক্রয় • ${widget.supplier['name']}')),
         body: Column(children: [
-          Padding(padding: const EdgeInsets.all(10), child: TextField(controller: q, onChanged: _search, decoration: const InputDecoration(hintText: 'পণ্য খুঁজুন', prefixIcon: Icon(Icons.search), isDense: true))),
+          Padding(padding: const EdgeInsets.all(10), child: TextField(
+            controller: q,
+            onChanged: _search,
+            decoration: InputDecoration(
+              hintText: 'পণ্য খুঁজুন / স্ক্যান করুন',
+              prefixIcon: const Icon(Icons.search),
+              isDense: true,
+              suffixIcon: IconButton(
+                icon: const Icon(Icons.qr_code_scanner),
+                onPressed: () async {
+                  final code = await scanOnce(context);
+                  if (code != null) {
+                    q.text = code;
+                    _search(code);
+                  }
+                },
+              ),
+            ),
+          )),
           Expanded(
             flex: 4,
             child: ListView(children: [for (final p in results) ListTile(dense: true, title: Text('${p['name']}'), subtitle: Text('স্টক ${fmtQty(n(p['stock']))}'), trailing: const Icon(Icons.add_circle, color: C.teal), onTap: () => _pick(p))]),

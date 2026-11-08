@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/db.dart';
+import '../core/pdf_reports.dart';
 import '../core/ui.dart';
 import 'sales.dart';
 
@@ -113,6 +114,8 @@ class _RepState extends State<ReportsScreen> {
           for (final u in users) _r('${u['name']} (${u['c']} বিল)', money(n(u['t']))),
         ]),
       const SizedBox(height: 12),
+      ElevatedButton.icon(onPressed: () => runPdf(context, () => pdfBusinessReport(days, mine: widget.mine)), icon: const Icon(Icons.picture_as_pdf), label: const Text('PDF রিপোর্ট শেয়ার করুন')),
+      const SizedBox(height: 8),
       OutlinedButton.icon(
         onPressed: () => go(context, Scaffold(appBar: AppBar(title: const Text('বিল তালিকা')), body: SalesScreen(mine: widget.mine))),
         icon: const Icon(Icons.list_alt),

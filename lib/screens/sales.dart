@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../core/contact.dart';
 import '../core/db.dart';
+import '../core/pdf_reports.dart';
 import '../core/ui.dart';
 import '../core/voucher.dart';
 
@@ -190,6 +191,7 @@ class _SaleDetState extends State<SaleDetailScreen> {
         const SizedBox(height: 10),
         Wrap(spacing: 8, runSpacing: 8, children: [
           ElevatedButton.icon(onPressed: _voucher, icon: const Icon(Icons.receipt_long), label: const Text('ভাউচার')),
+          OutlinedButton.icon(onPressed: () => runPdf(context, () => pdfSaleVoucher(widget.saleId)), icon: const Icon(Icons.picture_as_pdf), label: const Text('PDF ভাউচার')),
           if (!cancelled) OutlinedButton.icon(onPressed: _return, icon: const Icon(Icons.assignment_return), label: const Text('রিটার্ন')),
           if (!cancelled && !Session.isCashier)
             OutlinedButton.icon(style: OutlinedButton.styleFrom(foregroundColor: C.red), onPressed: _cancel, icon: const Icon(Icons.block), label: const Text('বিল বাতিল')),
