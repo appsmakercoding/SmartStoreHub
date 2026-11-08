@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../core/contact.dart';
 import '../core/db.dart';
+import '../core/pdf_reports.dart';
 import '../core/ui.dart';
 import '../core/voucher.dart';
 import 'sales.dart';
@@ -188,6 +189,7 @@ class _CustDetState extends State<CustomerDetailScreen> {
           if (due > 0) OutlinedButton.icon(onPressed: () => _notify('sms'), icon: const Icon(Icons.sms), label: const Text('SMS')),
           OutlinedButton.icon(onPressed: () => _notify('call'), icon: const Icon(Icons.call), label: const Text('কল')),
           OutlinedButton.icon(onPressed: _statement, icon: const Icon(Icons.receipt_long), label: const Text('খতিয়ান শেয়ার')),
+          OutlinedButton.icon(onPressed: () => runPdf(context, () => pdfCustomerStatement(widget.customerId)), icon: const Icon(Icons.picture_as_pdf), label: const Text('খতিয়ান PDF')),
         ]),
         sectionTitle('খতিয়ান (বিল ও আদায়)'),
         if (ledger.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('কোনো লেনদেন নেই', style: TextStyle(color: Colors.black45))),

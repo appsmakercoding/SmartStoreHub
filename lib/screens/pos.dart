@@ -1,29 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
 import '../core/db.dart';
 import '../core/ui.dart';
 import '../core/voucher.dart';
-
-class ScanPage extends StatefulWidget {
-  const ScanPage({super.key});
-  @override
-  State<ScanPage> createState() => _ScanState();
-}
-
-class _ScanState extends State<ScanPage> {
-  bool done = false;
-  @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('বারকোড স্ক্যান করুন')),
-        body: MobileScanner(onDetect: (cap) {
-          if (done || cap.barcodes.isEmpty) return;
-          final v = cap.barcodes.first.rawValue;
-          if (v == null) return;
-          done = true;
-          Navigator.pop(context, v);
-        }),
-      );
-}
+import 'scanner.dart';
 
 class PosScreen extends StatefulWidget {
   const PosScreen({super.key});
@@ -51,35 +30,45 @@ class _PosState extends State<PosScreen> {
     if (mounted) setState(() => results = r);
   }
 
-  void _add(Rec p) {
+  /// সফল হলে null, নয়তো ত্রুটির বার্তা
+  String? _addItem(Rec p) {
     final id = p['id'] as int;
     final stock = n(p['stock']);
     final ex = cart.where((c) => c.id == id).toList();
     if (ex.isNotEmpty) {
-      if (ex.first.qty + 1 > stock) {
-        snack(context, 'স্টকে এর বেশি নেই');
-        return;
-      }
+      if (ex.first.qty + 1 > stock) return 'স্টকে এর বেশি নেই';
       setState(() { ex.first.qty += 1; });
     } else {
-      if (stock <= 0) {
-        snack(context, 'স্টক নেই');
-        return;
-      }
+      if (stock <= 0) return 'স্টক নেই';
       setState(() { cart.add(CartItem(id, '${p['name']}', n(p['price']), n(p['cost']), stock, unit: '${p['unit'] ?? 'পিস'}')); });
     }
+    return null;
   }
 
+  void _add(Rec p) {
+    final e = _addItem(p);
+    if (e != null) snack(context, e);
+  }
+
+  // ধারাবাহিক স্ক্যান: ক্যামেরা খোলা রেখে একের পর এক পণ্য কার্টে যোগ হয়
   Future<void> _scan() async {
-    final code = await Navigator.push<String>(context, MaterialPageRoute(builder: (_) => const ScanPage()));
-    if (code == null) return;
-    final p = await Db.byBarcode(code);
-    if (!mounted) return;
-    if (p == null) {
-      snack(context, 'বারকোড পাওয়া যায়নি: $code');
-    } else {
-      _add(p);
-    }
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ScanPage(
+          title: 'বিলের জন্য স্ক্যান',
+          onCode: (code) async {
+            final p = await Db.byBarcode(code);
+            if (p == null) return '❌ পাওয়া যায়নি: $code';
+            final e = _addItem(p);
+            if (e != null) return '⚠ ${p['name']}: $e';
+            final c = cart.firstWhere((x) => x.id == p['id']);
+            return '✔ ${p['name']} যোগ হয়েছে (মোট ${fmtQty(c.qty)})';
+          },
+        ),
+      ),
+    );
+    if (mounted) _search(q.text);
   }
 
   Future<void> _quick() async {

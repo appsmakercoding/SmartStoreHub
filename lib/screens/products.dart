@@ -2,6 +2,7 @@ import 'package:barcode_widget/barcode_widget.dart';
 import 'package:flutter/material.dart';
 import '../core/db.dart';
 import '../core/ui.dart';
+import 'scanner.dart';
 
 class ProductsScreen extends StatefulWidget {
   const ProductsScreen({super.key});
@@ -42,6 +43,8 @@ class _ProductsState extends State<ProductsScreen> {
           ? ['', '', '', 'পিস', '', '', '', '5', '']
           : ['${p['name']}', '${p['barcode'] ?? ''}', '${p['category'] ?? ''}', '${p['unit'] ?? 'পিস'}', '${p['cost']}', '${p['price']}', '${p['stock']}', '${p['min_stock']}', '${p['expiry'] ?? ''}'],
       numeric: {4, 5, 6, 7},
+      scanFields: {1},
+      scan: () => scanOnce(context),
     );
     if (r == null || r[0].isEmpty) return;
     final err = await Db.saveProduct({
@@ -187,7 +190,22 @@ class _ProductsState extends State<ProductsScreen> {
           if (stats.isNotEmpty && canManage) Padding(padding: const EdgeInsets.fromLTRB(10, 8, 10, 0), child: StatCard('মোট স্টকের মূল্য (ক্রয়মূল্যে)', money(n(stats['v'])), Icons.warehouse, const Color(0xFF1565C0))),
           Padding(
             padding: const EdgeInsets.all(10),
-            child: TextField(controller: q, onChanged: (_) => _load(), decoration: const InputDecoration(hintText: 'পণ্য খুঁজুন (নাম/বারকোড)', prefixIcon: Icon(Icons.search), isDense: true)),
+            child: TextField(controller: q, onChanged: (_) => _load(), decoration: InputDecoration(
+              hintText: 'পণ্য খুঁজুন (নাম/বারকোড)',
+              prefixIcon: const Icon(Icons.search),
+              isDense: true,
+              suffixIcon: IconButton(
+                tooltip: 'স্ক্যান করে খুঁজুন',
+                icon: const Icon(Icons.qr_code_scanner),
+                onPressed: () async {
+                  final code = await scanOnce(context);
+                  if (code != null) {
+                    q.text = code;
+                    _load();
+                  }
+                },
+              ),
+            )),
           ),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,

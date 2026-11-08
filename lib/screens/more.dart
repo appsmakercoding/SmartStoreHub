@@ -2,6 +2,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import '../core/backup.dart';
 import '../core/db.dart';
+import '../core/export.dart';
+import '../core/pdf_reports.dart';
 import '../core/license.dart';
 import '../core/ui.dart';
 import 'cashclose.dart';
@@ -24,6 +26,45 @@ class MoreScreen extends StatelessWidget {
       _t(Icons.local_shipping, 'সরবরাহকারী ও ক্রয় (মাল কেনা)', () => pushPage(context, 'সরবরাহকারী ও ক্রয়', const SuppliersScreen())),
       _t(Icons.receipt, 'দোকানের খরচ', () => pushPage(context, 'দোকানের খরচ', const ExpensesScreen())),
       _t(Icons.account_balance, 'দৈনিক ক্যাশ ক্লোজিং', () => pushPage(context, 'দৈনিক ক্যাশ ক্লোজিং', const CashCloseScreen())),
+      if (!Session.isCashier)
+        _t(Icons.picture_as_pdf, 'PDF রিপোর্ট (শেয়ার/প্রিন্ট)', () async {
+          final k = await showDialog<String>(
+            context: context,
+            builder: (dc) => SimpleDialog(title: const Text('কোন PDF চান?'), children: [
+              SimpleDialogOption(onPressed: () => Navigator.pop(dc, 'b1'), child: const Text('ব্যবসায়িক রিপোর্ট • আজ')),
+              SimpleDialogOption(onPressed: () => Navigator.pop(dc, 'b7'), child: const Text('ব্যবসায়িক রিপোর্ট • ৭ দিন')),
+              SimpleDialogOption(onPressed: () => Navigator.pop(dc, 'b30'), child: const Text('ব্যবসায়িক রিপোর্ট • ৩০ দিন')),
+              SimpleDialogOption(onPressed: () => Navigator.pop(dc, 'dues'), child: const Text('গ্রাহকের বাকি তালিকা')),
+              SimpleDialogOption(onPressed: () => Navigator.pop(dc, 'sup'), child: const Text('সরবরাহকারীর হিসাব')),
+              SimpleDialogOption(onPressed: () => Navigator.pop(dc, 'stock'), child: const Text('স্টক তালিকা')),
+              SimpleDialogOption(onPressed: () => Navigator.pop(dc, 'exp'), child: const Text('খরচ (৩০ দিন)')),
+            ]),
+          );
+          if (k == null || !context.mounted) return;
+          await runPdf(context, () async {
+            if (k == 'b1') await pdfBusinessReport(1);
+            if (k == 'b7') await pdfBusinessReport(7);
+            if (k == 'b30') await pdfBusinessReport(30);
+            if (k == 'dues') await pdfCustomerDues();
+            if (k == 'sup') await pdfSupplierList();
+            if (k == 'stock') await pdfStockList();
+            if (k == 'exp') await pdfExpenses();
+          });
+        }),
+      if (!Session.isCashier)
+        _t(Icons.table_chart, 'এক্সেল/CSV এক্সপোর্ট (হিসাবরক্ষকের জন্য)', () async {
+          final k = await showDialog<String>(
+            context: context,
+            builder: (dc) => SimpleDialog(title: const Text('কী এক্সপোর্ট করবেন?'), children: [
+              SimpleDialogOption(onPressed: () => Navigator.pop(dc, 'sales'), child: const Text('বিক্রি (গত ৩০ দিন)')),
+              SimpleDialogOption(onPressed: () => Navigator.pop(dc, 'dues'), child: const Text('গ্রাহকের বাকি তালিকা')),
+              SimpleDialogOption(onPressed: () => Navigator.pop(dc, 'products'), child: const Text('পণ্য ও স্টক তালিকা')),
+              SimpleDialogOption(onPressed: () => Navigator.pop(dc, 'suppliers'), child: const Text('সরবরাহকারীর হিসাব')),
+              SimpleDialogOption(onPressed: () => Navigator.pop(dc, 'expenses'), child: const Text('খরচ (গত ৩০ দিন)')),
+            ]),
+          );
+          if (k != null) await exportCsv(k);
+        }),
       sectionTitle('সেটিংস ও সুরক্ষা'),
       if (admin) _t(Icons.group_add, 'ইউজার ম্যানেজমেন্ট (ম্যানেজার/ক্যাশিয়ার)', () => pushPage(context, 'ইউজার ম্যানেজমেন্ট', const UsersScreen())),
       _t(Icons.history, 'অ্যাক্টিভিটি লগ (কে কী করল)', () => pushPage(context, 'অ্যাক্টিভিটি লগ', const LogScreen())),
@@ -232,6 +273,30 @@ class _ProfileState extends State<ProfileScreen> {
               await Db.setSetting('max_disc_pct', '${double.tryParse(r[4]) ?? 10}');
               await Db.log('দোকানের সেটিংস বদলানো হয়েছে');
               _load();
+            },
+          ),
+        if (Session.isAdmin)
+          ListTile(
+            leading: const Icon(Icons.science, color: C.gold),
+            title: const Text('ডেমো ডেটা যোগ করুন'),
+            subtitle: const Text('নতুন ক্রেতাকে অ্যাপ দেখানোর জন্য নমুনা পণ্য, গ্রাহক ও বিক্রি'),
+            onTap: () async {
+              if (!await confirmDialog(context, 'ডেমো ডেটা যোগ করবেন?', 'নমুনা পণ্য, গ্রাহক ও কয়েকটি বিক্রি যোগ হবে। আসল ব্যবহারের আগে "নতুন শুরু" দিয়ে মুছে ফেলবেন।')) return;
+              await Db.loadDemo();
+              if (mounted) snack(context, 'ডেমো ডেটা যোগ হয়েছে ✔');
+            },
+          ),
+        if (Session.isAdmin)
+          ListTile(
+            leading: const Icon(Icons.delete_forever, color: C.red),
+            title: const Text('সব ডেটা মুছে নতুন শুরু', style: TextStyle(color: C.red)),
+            subtitle: const Text('পণ্য, গ্রাহক, বিক্রি, হিসাব সব মুছবে (ইউজার ও সেটিংস থাকবে)'),
+            onTap: () async {
+              if (!await confirmDialog(context, 'সব ডেটা মুছবেন?', 'পণ্য, গ্রাহক, বিক্রি, সরবরাহকারী ও সব হিসাব স্থায়ীভাবে মুছে যাবে। আগে ব্যাকআপ নিয়েছেন তো?', yes: 'হ্যাঁ, মুছুন')) return;
+              if (!mounted) return;
+              if (!await confirmDialog(context, 'শেষবার নিশ্চিত করুন', 'এটি ফেরত আনা যাবে না।', yes: 'মুছে ফেলুন')) return;
+              await Db.resetData();
+              if (mounted) snack(context, 'নতুন শুরুর জন্য প্রস্তুত ✔');
             },
           ),
       ]);
